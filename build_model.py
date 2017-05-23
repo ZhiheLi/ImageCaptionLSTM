@@ -6,6 +6,7 @@ from keras.preprocessing.sequence import pad_sequences
 from keras import metrics, optimizers
 from keras.callbacks import EarlyStopping
 from keras import backend
+from keras.utils import plot_model
 
 import tensorflow as tf
 import numpy as np
@@ -98,6 +99,8 @@ class BuildModel():
         rmsprop = optimizers.rmsprop(lr = lr)
         self.model.compile(loss='categorical_crossentropy', optimizer=rmsprop,
                            metrics=[metrics.categorical_accuracy])
+
+        plot_model(self.model, to_file='model.png', show_shapes=True)
         return
 
     def model_fit(self, batch_size, epochs, earlystop):
