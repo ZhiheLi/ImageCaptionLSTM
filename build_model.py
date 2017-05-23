@@ -122,7 +122,7 @@ class BuildModel():
         f = open('test.txt', 'w')
 
         for img in img_all:
-            cap_beam = [[[dct['0']], 0.0]] * beam_size
+            cap_beam = [[[dct['#']], 0.0]] * beam_size
             end = False
             count = 0
             while not end and count < self.cap_max_len:
@@ -130,7 +130,7 @@ class BuildModel():
                 cap_cand = []
                 itr = 1 if count == 1 else beam_size
                 for i in range(itr):
-                    if cap_beam[i][0][-1] != dct['1']:
+                    if cap_beam[i][0][-1] != dct['$']:
                         cap_pad = np.zeros((self.cap_max_len,))
                         cap_pad[:len(cap_beam[i][0])] = cap_beam[i][0]
                         prob = np.log(self.model.predict([np.array([img]), np.array([cap_pad])])[0])
