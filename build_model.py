@@ -71,8 +71,8 @@ class BuildModel():
                             img = []
                             next_word = []
                             word_seq = []
-
-    def model_gen(self, lr, embeddingDim, denseNode, lstmNode):
+                            
+    def model_gen(self, lr, dropout, embeddingDim, denseNode, lstmNode):
         img_mdl = Sequential()
         img_mdl.add(Dense(denseNode, activation='relu', input_dim=self.cnnDim))
         img_mdl.add(RepeatVector(self.cap_max_len))
@@ -84,7 +84,7 @@ class BuildModel():
 
         self.model = Sequential()
         self.model.add(Merge([img_mdl, cap_mdl], mode='concat'))
-        self.model.add(LSTM(lstmNode, return_sequences=False))
+        self.model.add(LSTM(lstmNode, return_sequences=False, dropout=dropout))
         self.model.add(Dense(self.chrNum, activation='softmax'))
 
         rmsprop = optimizers.rmsprop(lr = lr)
