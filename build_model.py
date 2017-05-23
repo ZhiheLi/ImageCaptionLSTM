@@ -101,12 +101,13 @@ class BuildModel():
         return
 
     def model_fit(self, batch_size, epochs, earlystop):
+        val = next(self.data_gen(batch_size=1000, key='validation'))
         es = EarlyStopping(monitor='val_loss', patience=earlystop)
+
         self.model.fit_generator(self.data_gen(batch_size=batch_size, key='train'),
                                  steps_per_epoch=int(self.train_sample/batch_size),
                                  epochs=epochs, verbose=1, callbacks=[es],
-                                 validation_data=self.data_gen(batch_size=1000, key='validation'),
-                                 validation_steps=1)
+                                 validation_data=val)
         self.model.save_weights('model_weights.h5')
         return
 
