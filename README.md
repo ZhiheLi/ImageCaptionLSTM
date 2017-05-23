@@ -1,2 +1,2 @@
 # Image-Caption-LSTM-
-Bullshit
+Don't read me.
