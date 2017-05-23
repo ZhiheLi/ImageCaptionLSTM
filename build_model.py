@@ -1,4 +1,4 @@
-# coding = utf-8
+# coding: utf-8
 
 from keras.models import Sequential, load_model
 from keras.layers import LSTM, Embedding, Dense, Merge, TimeDistributed, RepeatVector

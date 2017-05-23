@@ -1,4 +1,4 @@
-# coding=utf-8
+# coding: utf-8
 
 import pickle as pkl
 import h5py

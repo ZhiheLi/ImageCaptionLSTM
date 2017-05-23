@@ -1,4 +1,4 @@
-#coding = utf-8
+#coding: utf-8
 
 from Preprocess import Preprocess
 from build_model import BuildModel
