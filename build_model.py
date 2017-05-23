@@ -45,7 +45,7 @@ class BuildModel():
         for lst in txt:
             tmp = []
             for s in lst:
-                tmp.append([dct[k] for k in (c for c in s if c in dct)])
+                tmp.append([dct[k] for k in s if k in dct])
             cap.append(tmp)
         return cap
 
