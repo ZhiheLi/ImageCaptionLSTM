@@ -5,13 +5,15 @@ from keras.layers import LSTM, Embedding, Dense, Merge, TimeDistributed, RepeatV
 from keras.preprocessing.sequence import pad_sequences
 from keras import metrics
 from keras.callbacks import EarlyStopping
+from keras import backend
 
+import tensorflow as tf
 import numpy as np
 import pickle as pkl
 import h5py
 import copy
 import random
-
+import os
 
 
 class BuildModel():
@@ -23,6 +25,12 @@ class BuildModel():
         self.train_sample = train_sample    #训练集总句子数
         self.valid_sample = valid_sample    #验证集总句子数
         self.model = None
+
+        os.environ["CUDA_VISIBLE_DEVICES"]="0"
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth=True
+        sess = tf.Session(config=config)
+        backend.set_session(sess)
 
     def img_extract(self, key):
         f = h5py.File('image_vgg19_fc2_feature.h5', 'r')
