@@ -3,7 +3,7 @@
 from keras.models import Sequential, load_model
 from keras.layers import LSTM, Embedding, Dense, Merge, TimeDistributed, RepeatVector
 from keras.preprocessing.sequence import pad_sequences
-from keras import metrics
+from keras import metrics, optimizers
 from keras.callbacks import EarlyStopping
 
 import numpy as np
@@ -72,7 +72,7 @@ class BuildModel():
                             next_word = []
                             word_seq = []
 
-    def model_gen(self, embeddingDim, denseNode, lstmNode):
+    def model_gen(self, lr, embeddingDim, denseNode, lstmNode):
         img_mdl = Sequential()
         img_mdl.add(Dense(denseNode, activation='relu', input_dim=self.cnnDim))
         img_mdl.add(RepeatVector(self.cap_max_len))
@@ -87,7 +87,8 @@ class BuildModel():
         self.model.add(LSTM(lstmNode, return_sequences=False))
         self.model.add(Dense(self.chrNum, activation='softmax'))
 
-        self.model.compile(loss='categorical_crossentropy', optimizer='rmsprop',
+        rmsprop = optimizers.rmsprop(lr = lr)
+        self.model.compile(loss='categorical_crossentropy', optimizer=rmsprop,
                            metrics=[metrics.categorical_accuracy])
         return
 
