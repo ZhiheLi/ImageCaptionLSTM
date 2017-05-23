@@ -148,7 +148,7 @@ class BuildModel():
         return out
 
     def ifend(self, cap_beam, beam_size, dct):
-        flag = 0
+        flag = True
         for i in range(beam_size):
             flag &= (cap_beam[0][-1] == dct['1'])
         return flag
