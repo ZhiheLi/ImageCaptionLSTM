@@ -1,2 +1,2 @@
-# Image-Caption-LSTM-
+# Image Caption with LSTM
 GG
