@@ -1,12 +1,13 @@
 # coding: utf-8
 
 from keras.models import Sequential, load_model
-from keras.layers import LSTM, Embedding, Dense, Merge, TimeDistributed, RepeatVector
+from keras.layers import LSTM, Embedding, Dense, Merge, Layer, Reshape, Lambda, TimeDistributed
 from keras.preprocessing.sequence import pad_sequences
 from keras import metrics, optimizers
 from keras.callbacks import EarlyStopping
 from keras import backend
 from keras.utils import plot_model
+from keras import regularizers
 
 import tensorflow as tf
 import numpy as np
@@ -15,7 +16,10 @@ import h5py
 import copy
 import random
 import os
+import time
 
+def slice(x):
+        return tf.slice(x, [0,1,0],[-1,-1,-1])
 
 class BuildModel():
 
@@ -64,57 +68,56 @@ class BuildModel():
 
             for i, lst in enumerate(cap_all):
                 for s in lst:
+                    count += 1
+                    n = np.zeros((self.cap_max_len, self.chrNum))
                     for j, c in enumerate(s[:-1]):
-                        count += 1
-                        next_word.append(np.zeros((self.chrNum,)))
-                        next_word[-1][s[j+1]] = 1
-                        word_seq.append(s[:j+1])
-                        img.append(img_all[i])
+                        n[j][s[j+1]] = 1
+                    next_word.append(n)
+                    word_seq.append(s[:-1])
+                    img.append(img_all[i])
 
-                        if count == batch_size:
-                            img = np.array(img)
-                            next_word = np.array(next_word)
-                            word_seq = pad_sequences(word_seq, maxlen=self.cap_max_len, padding='post')
-                            yield [[img, word_seq], next_word]
-                            count = 0
-                            img = []
-                            next_word = []
-                            word_seq = []
+                    if count == batch_size:
+                        img = np.array(img)
+                        next_word = np.array(next_word)
+                        word_seq = pad_sequences(word_seq, maxlen=self.cap_max_len, padding='post', value=1)
+                        yield [[img, word_seq], next_word]
+                        count = 0
+                        img = []
+                        next_word = []
+                        word_seq = []
                             
-    def model_gen(self, lr, dropout, embeddingDim, denseNode, lstmNode):
+    def model_gen(self, lr, dropout, embeddingDim, regularCoeff):
         img_mdl = Sequential()
-        img_mdl.add(Dense(denseNode, activation='relu', input_dim=self.cnnDim))
-        img_mdl.add(RepeatVector(self.cap_max_len))
-
+        img_mdl.add(Dense(embeddingDim, activation='relu', input_dim=self.cnnDim, kernel_regularizer=regularizers.l2(2*regularCoeff), bias_regularizer=regularizers.l2(regularCoeff)))
+        img_mdl.add(Reshape((1,embeddingDim)))
+        
         cap_mdl = Sequential()
         cap_mdl.add(Embedding(input_dim=self.chrNum, output_dim=embeddingDim, input_length=self.cap_max_len))
-        cap_mdl.add(LSTM(units=embeddingDim, return_sequences=True))       #这里为何要加LSTM
-        cap_mdl.add(TimeDistributed(Dense(denseNode)))
 
         self.model = Sequential()
-        self.model.add(Merge([img_mdl, cap_mdl], mode='concat'))
-        self.model.add(LSTM(lstmNode, return_sequences=False, dropout=dropout))
-        self.model.add(Dense(self.chrNum, activation='softmax'))
+        self.model.add(Merge([img_mdl, cap_mdl], mode='concat', concat_axis=1))
+        self.model.add(LSTM(embeddingDim, return_sequences=True, dropout=dropout, kernel_regularizer=regularizers.l2(2*regularCoeff), bias_regularizer=regularizers.l2(regularCoeff)))
+        self.model.add(Lambda(slice))
+        self.model.add(TimeDistributed(Dense(self.chrNum, activation='softmax')))
 
-        rmsprop = optimizers.rmsprop(lr = lr)
-        self.model.compile(loss='categorical_crossentropy', optimizer=rmsprop,
+        sgd = optimizers.SGD(lr = lr)
+        self.model.compile(loss='categorical_crossentropy', optimizer=sgd,
                            metrics=[metrics.categorical_accuracy])
 
         plot_model(self.model, to_file='model.png', show_shapes=True)
         return
 
-    def model_fit(self, batch_size, epochs, earlystop):
+    def model_fit(self, batch_size, epochs):
         val = next(self.data_gen(batch_size=1000, key='validation'))
-        es = EarlyStopping(monitor='val_loss', patience=earlystop)
-
+        
         self.model.fit_generator(self.data_gen(batch_size=batch_size, key='train'),
                                  steps_per_epoch=int(self.train_sample/batch_size),
-                                 epochs=epochs, verbose=1, callbacks=[es],
-                                 validation_data=val)
-        self.model.save_weights('model_weights.h5')
+                                 epochs=epochs, verbose=1, validation_data=val)
+        self.model.save('model_weights.h5')
         return
 
     def cap_gen(self, beam_size, index):
+        self.model = load_model('my_model.h5')
         img_all = self.img_extract('test_set')
         cap_pred = []
         dct = pkl.load(open('dictionary.pkl', 'rb'))
@@ -126,22 +129,21 @@ class BuildModel():
             end = False
             count = 0
             while not end and count < self.cap_max_len:
-                count += 1
                 cap_cand = []
-                itr = 1 if count == 1 else beam_size
+                itr = 1 if count == 0 else beam_size
                 for i in range(itr):
                     if cap_beam[i][0][-1] != dct['$']:
-                        cap_pad = np.zeros((self.cap_max_len,))
+                        cap_pad = np.ones((self.cap_max_len,))
                         cap_pad[:len(cap_beam[i][0])] = cap_beam[i][0]
-                        prob = np.log(self.model.predict([np.array([img]), np.array([cap_pad])])[0])
+                        prob = np.log(self.model.predict([np.array([img]), np.array([cap_pad])])[0][count][:])
                         next_word_ind = np.argsort(prob)[-beam_size:]
-                        cap_tmp = self.nextWordAppend(cap_beam[i], next_word_ind, prob, beam_size)
+                        cap_tmp = self.nextWordAppend(cap_beam[i], next_word_ind, prob[next_word_ind], beam_size)
                     else:
                         cap_tmp = [cap_beam[i]]
                     cap_cand.extend(cap_tmp)
                 cap_beam = sorted(cap_cand, key=lambda x: x[1])[-beam_size:]
                 end = self.ifend(cap_beam, beam_size, dct)
-
+                count += 1
             cap = max(cap_beam, key=lambda x: x[1])[0]
             cap, index = self.ind2word(cap, map, index)
             cap_pred.append(cap)
@@ -163,7 +165,7 @@ class BuildModel():
     def ifend(self, cap_beam, beam_size, dct):
         flag = True
         for i in range(beam_size):
-            flag &= (cap_beam[0][-1] == dct['1'])
+            flag &= (cap_beam[0][-1] == dct['$'])
         return flag
 
     def ind2word(self, cap, map, index):
