@@ -53,38 +53,33 @@ class BuildModel():
             cap.append(tmp)
         return cap
 
-    def data_gen(self, batch_size, key):
+    def data_gen(self, key):
         img_all_ori = self.img_extract(key+'_set')
         cap_all_ori = self.cap_extract(key)
 
-        count = 0
         img = []
         next_word = []
         word_seq = []
-        while 1:
-            rand_index = random.sample(range(len(cap_all_ori)), len(cap_all_ori))
-            img_all = img_all_ori[rand_index]
-            cap_all = np.array(cap_all_ori)[rand_index]
+        rand_index = random.sample(range(len(cap_all_ori)), len(cap_all_ori))
+        img_all = img_all_ori[rand_index]
+        cap_all = np.array(cap_all_ori)[rand_index]
 
-            for i, lst in enumerate(cap_all):
-                for s in lst:
-                    count += 1
-                    n = np.zeros((self.cap_max_len, self.chrNum))
-                    for j, c in enumerate(s[:-1]):
-                        n[j][s[j+1]] = 1
-                    next_word.append(n)
-                    word_seq.append(s[:-1])
-                    img.append(img_all[i])
+        for i, lst in enumerate(cap_all):
+            for s in lst:
+                next_word.append(s[1:])
+                word_seq.append(s[:-1])
+                img.append(img_all[i])
+            
 
-                    if count == batch_size:
-                        img = np.array(img)
-                        next_word = np.array(next_word)
-                        word_seq = pad_sequences(word_seq, maxlen=self.cap_max_len, padding='post', value=1)
-                        yield [[img, word_seq], next_word]
-                        count = 0
-                        img = []
-                        next_word = []
-                        word_seq = []
+        img = np.array(img)
+        next_word = np.array(next_word)
+        next_word = pad_sequences(next_word, maxlen=self.cap_max_len, padding='post', value=1)
+        next_word = np.expand_dims(next_word, -1)
+        word_seq = pad_sequences(word_seq, maxlen=self.cap_max_len, padding='post', value=1)
+        print(img.shape)
+        print(next_word.shape)
+        print(word_seq.shape)
+        return ([img, word_seq], next_word)
                             
     def model_gen(self, lr, dropout, embeddingDim, regularCoeff):
         img_mdl = Sequential()
@@ -96,23 +91,23 @@ class BuildModel():
 
         self.model = Sequential()
         self.model.add(Merge([img_mdl, cap_mdl], mode='concat', concat_axis=1))
-        self.model.add(LSTM(embeddingDim, return_sequences=True, dropout=dropout, kernel_regularizer=regularizers.l2(2*regularCoeff), bias_regularizer=regularizers.l2(regularCoeff)))
+        self.model.add(LSTM(embeddingDim, return_sequences=True, dropout=dropout, kernel_regularizer=regularizers.l2(2*regularCoeff), bias_regularizer=regularizers.l2(regularCoeff), recurrent_initializer='zeros'))
         self.model.add(Lambda(slice))
         self.model.add(TimeDistributed(Dense(self.chrNum, activation='softmax')))
 
         sgd = optimizers.SGD(lr = lr)
-        self.model.compile(loss='categorical_crossentropy', optimizer=sgd,
-                           metrics=[metrics.categorical_accuracy])
+        self.model.compile(loss='sparse_categorical_crossentropy', optimizer=sgd,
+                           metrics=[metrics.sparse_categorical_accuracy])
 
         plot_model(self.model, to_file='model.png', show_shapes=True)
         return
 
     def model_fit(self, batch_size, epochs):
-        val = next(self.data_gen(batch_size=1000, key='validation'))
-        
-        self.model.fit_generator(self.data_gen(batch_size=batch_size, key='train'),
-                                 steps_per_epoch=int(self.train_sample/batch_size),
-                                 epochs=epochs, verbose=1, validation_data=val)
+                
+        (trainX, trainY) = self.data_gen('train') 
+        (valX, valY) = self.data_gen('validation')
+        self.model.fit(trainX, trainY, batch_size=batch_size, epochs=epochs, validation_data=(valX, valY))
+
         self.model.save('model_weights.h5')
         return
 
