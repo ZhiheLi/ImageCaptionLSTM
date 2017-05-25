@@ -1,7 +1,7 @@
 # coding: utf-8
 
 from keras.models import Sequential, load_model
-from keras.layers import LSTM, Embedding, Dense, Merge, Layer, Reshape, Lambda, TimeDistributed
+from keras.layers import LSTM, Embedding, Dense, Merge, Layer, Reshape, Lambda, TimeDistributed, Activation
 from keras.preprocessing.sequence import pad_sequences
 from keras import metrics, optimizers
 from keras.callbacks import EarlyStopping
@@ -19,7 +19,26 @@ import os
 import time
 
 def slice(x):
-        return tf.slice(x, [0,1,0],[-1,-1,-1])
+    return tf.slice(x, [0,1,0],[-1,-1,-1])
+
+def _loss(y_true, y_pred):
+    epsilon = tf.convert_to_tensor(10e-8)
+    if epsilon.dtype != y_pred.dtype.base_dtype:
+        epsilon = tf.cast(epsilon, y_pred.dtype.base_dtype)
+    y_pred = tf.clip_by_value(y_pred, epsilon, 1 - epsilon)
+    y_pred = tf.log(y_pred)
+
+    output_shape = y_pred.get_shape()
+    label = tf.slice(y_true, [0,0,0], [-1,-1,1])
+    mask = tf.slice(y_true, [0,0,1], [-1,-1,1])
+    label = backend.cast(backend.flatten(label), 'int64')
+    mask = backend.flatten(mask)
+    logits = tf.reshape(y_pred, [-1, int(output_shape[-1])])
+    res = tf.nn.sparse_softmax_cross_entropy_with_logits(
+        labels=label, logits=logits)
+    res = tf.reshape(res * mask, tf.shape(y_pred)[:-1])
+    return backend.mean(res, axis=-1)
+
 
 class BuildModel():
 
@@ -59,6 +78,7 @@ class BuildModel():
 
         img = []
         next_word = []
+        mask = []
         word_seq = []
         rand_index = random.sample(range(len(cap_all_ori)), len(cap_all_ori))
         img_all = img_all_ori[rand_index]
@@ -67,6 +87,7 @@ class BuildModel():
         for i, lst in enumerate(cap_all):
             for s in lst:
                 next_word.append(s[1:])
+                mask.append([1] * (len(s)-1))
                 word_seq.append(s[:-1])
                 img.append(img_all[i])
             
@@ -75,10 +96,11 @@ class BuildModel():
         next_word = np.array(next_word)
         next_word = pad_sequences(next_word, maxlen=self.cap_max_len, padding='post', value=1)
         next_word = np.expand_dims(next_word, -1)
+        mask = np.array(mask)
+        mask = pad_sequences(mask, maxlen=self.cap_max_len, padding='post', value=0)
+        mask = np.expand_dims(mask, -1)
+        next_word = np.concatenate((next_word, mask), axis=-1)
         word_seq = pad_sequences(word_seq, maxlen=self.cap_max_len, padding='post', value=1)
-        print(img.shape)
-        print(next_word.shape)
-        print(word_seq.shape)
         return ([img, word_seq], next_word)
                             
     def model_gen(self, lr, dropout, embeddingDim, regularCoeff):
@@ -96,7 +118,7 @@ class BuildModel():
         self.model.add(TimeDistributed(Dense(self.chrNum, activation='softmax')))
 
         sgd = optimizers.SGD(lr = lr)
-        self.model.compile(loss='sparse_categorical_crossentropy', optimizer=sgd,
+        self.model.compile(loss=_loss, optimizer=sgd,
                            metrics=[metrics.sparse_categorical_accuracy])
 
         plot_model(self.model, to_file='model.png', show_shapes=True)
@@ -108,11 +130,11 @@ class BuildModel():
         (valX, valY) = self.data_gen('validation')
         self.model.fit(trainX, trainY, batch_size=batch_size, epochs=epochs, validation_data=(valX, valY))
 
-        self.model.save('model_weights.h5')
+        self.model.save_weights('my_model.h5')
         return
 
     def cap_gen(self, beam_size, index):
-        self.model = load_model('my_model.h5')
+        self.model.load_weights('my_model.h5')
         img_all = self.img_extract('test_set')
         cap_pred = []
         dct = pkl.load(open('dictionary.pkl', 'rb'))
