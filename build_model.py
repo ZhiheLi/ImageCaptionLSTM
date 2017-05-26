@@ -145,33 +145,40 @@ class BuildModel():
         f = open('test.txt', 'w')
 
         for img in img_all:
-            cap_beam = [[[dct['#']], 0.0] for _ in range(beam_size)]
-            end = False
-            count = 0
-            while not end and count < self.cap_max_len:
-                cap_cand = []
-                itr = 1 if count == 0 else beam_size
-                for i in range(itr):
-                    if cap_beam[i][0][-1] != dct['$']:
-                        cap_pad = np.ones((self.cap_max_len,))
-                        cap_pad[:len(cap_beam[i][0])] = cap_beam[i][0]
-                        prob = np.log(self.model.predict([np.array([img]), np.array([cap_pad])])[0][count][:])
-                        next_word_ind = np.argsort(prob)[-beam_size:]
-                        cap_tmp = self.nextWordAppend(cap_beam[i], next_word_ind, prob[next_word_ind], beam_size)
-                    else:
-                        cap_tmp = [deepcopy(cap_beam[i])]
-                    cap_cand.extend(cap_tmp)
-                cap_beam = sorted(cap_cand, key=lambda x: x[1])[-beam_size:]
-                end = self.ifend(cap_beam, beam_size, dct)
-                count += 1
+            cap_beam = self.beamsearch(img, beam_size, dct)
             cap = max(cap_beam, key=lambda x: x[1])[0]
-            cap, index = self.ind2word(cap, map, index)
-            cap_pred.append(cap)
-            f.write(cap + '\n')
+            capstr, index = self.ind2word(cap, map, index)
+            cap_pred.append(capstr)
+            f.write(capstr + '\n')
             print('Image %d Captioned' % index)
-            print(cap)
+            print(capstr)
         f.close()
         return
+
+    def beamsearch(self, img, beam_size, dct):
+        cap_beam = [[[dct['#']], 0.0] for _ in range(beam_size)]  # list of [caption, log prob]
+        end = False
+        count = 0
+        while not end and count < self.cap_max_len:
+            cap_cand = []
+            itr = 1 if count == 0 else beam_size
+            # pad each caption with ending character
+            cap_pads = np.tile(dct['$'], (itr, self.cap_max_len))
+            for i in range(itr):
+                cap_pads[i][:len(cap_beam[i][0])] = cap_beam[i][0]
+
+            probs = self.model.predict([np.tile(img, (itr, 1)), cap_pads])
+            for i in range(itr):
+                if cap_beam[i][0][-1] != dct['$']:
+                    next_word_ind = np.argsort(probs[i][count])[-beam_size:]
+                    cap_tmp = self.nextWordAppend(cap_beam[i], next_word_ind, np.log(probs[i][count][next_word_ind]), beam_size)
+                else:
+                    cap_tmp = [deepcopy(cap_beam[i])]
+                cap_cand.extend(cap_tmp)
+            cap_beam = sorted(cap_cand, key=lambda x: x[1])[-beam_size:]
+            end = self.ifend(cap_beam, beam_size, dct)
+            count += 1
+        return cap_beam
 
     def nextWordAppend(self, cap, next_word, prob, beam_size):
         out = []
