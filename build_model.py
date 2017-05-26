@@ -183,7 +183,7 @@ class BuildModel():
     def ifend(self, cap_beam, beam_size, dct):
         flag = True
         for i in range(beam_size):
-            flag &= (cap_beam[0][-1] == dct['$'])
+            flag &= (cap_beam[i][0][-1] == dct['$'])
         return flag
 
     def ind2word(self, cap, map, index):
