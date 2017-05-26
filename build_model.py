@@ -13,10 +13,12 @@ import tensorflow as tf
 import numpy as np
 import pickle as pkl
 import h5py
-import copy
 import random
 import os
 import time
+
+from copy import deepcopy
+
 
 def slice(x):
     return tf.slice(x, [0,1,0],[-1,-1,-1])
@@ -143,7 +145,7 @@ class BuildModel():
         f = open('test.txt', 'w')
 
         for img in img_all:
-            cap_beam = [[[dct['#']], 0.0]] * beam_size
+            cap_beam = [[[dct['#']], 0.0] for _ in range(beam_size)]
             end = False
             count = 0
             while not end and count < self.cap_max_len:
@@ -157,7 +159,7 @@ class BuildModel():
                         next_word_ind = np.argsort(prob)[-beam_size:]
                         cap_tmp = self.nextWordAppend(cap_beam[i], next_word_ind, prob[next_word_ind], beam_size)
                     else:
-                        cap_tmp = [cap_beam[i]]
+                        cap_tmp = [deepcopy(cap_beam[i])]
                     cap_cand.extend(cap_tmp)
                 cap_beam = sorted(cap_cand, key=lambda x: x[1])[-beam_size:]
                 end = self.ifend(cap_beam, beam_size, dct)
@@ -174,7 +176,7 @@ class BuildModel():
     def nextWordAppend(self, cap, next_word, prob, beam_size):
         out = []
         for i in range(beam_size):
-            tmp = copy.deepcopy(cap)
+            tmp = deepcopy(cap)
             tmp[0].append(next_word[i])
             tmp[1] += prob[i]
             out.append(tmp)
