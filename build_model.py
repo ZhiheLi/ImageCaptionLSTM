@@ -50,7 +50,7 @@ class BuildModel():
         self.valid_sample = valid_sample    #验证集总句子数
         self.model = None
 
-        os.environ["CUDA_VISIBLE_DEVICES"]="0"
+        os.environ["CUDA_VISIBLE_DEVICES"]="1"
         config = tf.ConfigProto()
         config.gpu_options.allow_growth=True
         sess = tf.Session(config=config)
@@ -128,7 +128,8 @@ class BuildModel():
                 
         (trainX, trainY) = self.data_gen('train') 
         (valX, valY) = self.data_gen('validation')
-        self.model.fit(trainX, trainY, batch_size=batch_size, epochs=epochs, validation_data=(valX, valY))
+        self.model.load_weights('my_model.h5')
+        self.model.fit(trainX, trainY, batch_size=batch_size, shuffle=True, epochs=epochs, validation_data=(valX, valY))
 
         self.model.save_weights('my_model.h5')
         return
@@ -189,7 +190,7 @@ class BuildModel():
         s = []
         for n in cap[1:-1]:
             s.append(map[n])
-        out = str(index) + '\n' + ''.join(s) + '\n'
+        out = str(index) + ' ' + ' '.join(s) + '\n'
         index += 1
         return out, index
 
