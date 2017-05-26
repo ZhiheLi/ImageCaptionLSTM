@@ -167,7 +167,7 @@ class BuildModel():
             cap = max(cap_beam, key=lambda x: x[1])[0]
             cap, index = self.ind2word(cap, map, index)
             cap_pred.append(cap)
-            f.write(cap)
+            f.write(cap + '\n')
             print('Image %d Captioned' % index)
             print(cap)
         f.close()
@@ -192,7 +192,7 @@ class BuildModel():
         s = []
         for n in cap[1:-1]:
             s.append(map[n])
-        out = str(index) + ' ' + ' '.join(s) + '\n'
+        out = str(index) + ' ' + ' '.join(s)
         index += 1
         return out, index
 
