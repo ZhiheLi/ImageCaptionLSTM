@@ -26,7 +26,7 @@ class Preprocess():
 
         valid = []
         f = open('valid.txt', encoding='utf-8')
-        self.extract(valid, f, dct, iftrain=False)
+        self.extract(valid, f, {}, iftrain=False)
         f.close()
 
         pkl.dump(train, open('train.pkl', 'wb'))
