@@ -50,11 +50,11 @@ def _loss(y_true, y_pred):
 class BuildModel():
 
     def __init__(self, cnnDim, chrNum, cap_max_len, train_sample, valid_sample):
-        self.cnnDim = cnnDim                #CNN特征维度
-        self.chrNum = chrNum                #汉字总数量
-        self.cap_max_len = cap_max_len      #最大句长
-        self.train_sample = train_sample    #训练集总句子数
-        self.valid_sample = valid_sample    #验证集总句子数
+        self.cnnDim = cnnDim                # CNN feature dimensions
+        self.chrNum = chrNum                # total count of chinese characters
+        self.cap_max_len = cap_max_len      # maximum caption length
+        self.train_sample = train_sample    # number of training samples
+        self.valid_sample = valid_sample    # number of validating samples
         self.model = None
 
         os.environ["CUDA_VISIBLE_DEVICES"] = "1"
