@@ -186,14 +186,19 @@ class BuildModel():
             capstr = ''
 
 
-    def cap_gen(self, beam_size, index):
+    def cap_gen(self, beam_size, index, dataset='test'):
         """Predicting process. Generate captions for each image using beam-search."""
+        assert(dataset in ('test', 'validation'))
+
         self.model.load_weights('my_model.h5')
-        img_all = self.img_extract('test_set')
+        img_all = self.img_extract(dataset + '_set')
         cap_pred = []
         dct = pkl.load(open('dictionary.pkl', 'rb'))
         map = self.map2word(dct)
-        f = open('test.txt', 'w')
+        if dataset == 'test':
+            f = open('test.txt', 'w')
+        else:
+            f = open('validation_predict.txt', 'w')
 
         for img in img_all:
             cap_beam = self.beamsearch(img, beam_size, dct)
