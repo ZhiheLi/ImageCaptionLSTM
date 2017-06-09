@@ -1,5 +1,7 @@
 # coding: utf-8
 
+"""Methods for image caption modeling, training, validating and testing."""
+
 from keras.models import Sequential, load_model
 from keras.layers import LSTM, Embedding, Dense, Merge, Layer, Reshape, Lambda, TimeDistributed, Activation
 from keras.preprocessing.sequence import pad_sequences
@@ -24,7 +26,9 @@ from copy import deepcopy
 def slice(x):
     return tf.slice(x, [0,1,0],[-1,-1,-1])
 
+
 def _loss(y_true, y_pred):
+    """Sparse categorical cross entropy loss w/ mask."""
     epsilon = tf.convert_to_tensor(10e-8)
     if epsilon.dtype != y_pred.dtype.base_dtype:
         epsilon = tf.cast(epsilon, y_pred.dtype.base_dtype)
@@ -53,17 +57,21 @@ class BuildModel():
         self.valid_sample = valid_sample    #验证集总句子数
         self.model = None
 
-        os.environ["CUDA_VISIBLE_DEVICES"]="1"
+        os.environ["CUDA_VISIBLE_DEVICES"] = "1"
         config = tf.ConfigProto()
-        config.gpu_options.allow_growth=True
+        config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
         backend.set_session(sess)
 
+
     def img_extract(self, key):
+        """Extract image features."""
         f = h5py.File('image_vgg19_fc2_feature.h5', 'r')
         return f[key].value
 
+
     def cap_extract(self, type):
+        """Extract captions from post-processed data files."""
         txt = pkl.load(open('%s.pkl' % type, 'rb'))
         dct = pkl.load(open('dictionary.pkl', 'rb'))
 
@@ -75,7 +83,9 @@ class BuildModel():
             cap.append(tmp)
         return cap
 
+
     def data_gen(self, key):
+        """Generate data for the input of the neural network."""
         img_all_ori = self.img_extract(key+'_set')
         cap_all_ori = self.cap_extract(key)
 
@@ -93,7 +103,6 @@ class BuildModel():
                 mask.append([1] * (len(s)-1))
                 word_seq.append(s[:-1])
                 img.append(img_all[i])
-            
 
         img = np.array(img)
         next_word = np.array(next_word)
@@ -105,18 +114,29 @@ class BuildModel():
         next_word = np.concatenate((next_word, mask), axis=-1)
         word_seq = pad_sequences(word_seq, maxlen=self.cap_max_len, padding='post', value=1)
         return ([img, word_seq], next_word)
-                            
+
+
     def model_gen(self, lr, dropout, embeddingDim, regularCoeff):
+        """Contruct the neural network model."""
         img_mdl = Sequential()
-        img_mdl.add(Dense(embeddingDim, activation='relu', input_dim=self.cnnDim, kernel_regularizer=regularizers.l2(2*regularCoeff), bias_regularizer=regularizers.l2(regularCoeff)))
+        img_mdl.add(Dense(embeddingDim,
+            activation='relu',
+            input_dim=self.cnnDim,
+            kernel_regularizer=regularizers.l2(2*regularCoeff),
+            bias_regularizer=regularizers.l2(regularCoeff)))
         img_mdl.add(Reshape((1,embeddingDim)))
-        
+
         cap_mdl = Sequential()
         cap_mdl.add(Embedding(input_dim=self.chrNum, output_dim=embeddingDim, input_length=self.cap_max_len))
 
         self.model = Sequential()
         self.model.add(Merge([img_mdl, cap_mdl], mode='concat', concat_axis=1))
-        self.model.add(LSTM(embeddingDim, return_sequences=True, dropout=dropout, kernel_regularizer=regularizers.l2(2*regularCoeff), bias_regularizer=regularizers.l2(regularCoeff), recurrent_initializer='zeros'))
+        self.model.add(LSTM(embeddingDim,
+            return_sequences=True,
+            dropout=dropout,
+            kernel_regularizer=regularizers.l2(2*regularCoeff),
+            bias_regularizer=regularizers.l2(regularCoeff),
+            recurrent_initializer='zeros'))
         self.model.add(Lambda(slice))
         self.model.add(TimeDistributed(Dense(self.chrNum, activation='softmax')))
 
@@ -128,7 +148,9 @@ class BuildModel():
         plot_model(self.model, to_file='model.png', show_shapes=True)
         return
 
+
     def model_fit(self, batch_size, epochs):
+        """Training process."""
         (trainX, trainY) = self.data_gen('train') 
         (valX, valY) = self.data_gen('validation')
         # Uncomment the following line to finetune training:
@@ -140,11 +162,14 @@ class BuildModel():
         checkpoint_callback = ModelCheckpoint(
             'checkpoints/weights_ep{epoch:04d}_loss{loss:.3f}_valloss{val_loss:.3f}.hdf5',
             save_weights_only=True, period=200)
-        self.model.fit(trainX, trainY, batch_size=batch_size, shuffle=True, epochs=epochs, validation_data=(valX, valY),
+
+        self.model.fit(trainX, trainY, batch_size=batch_size, shuffle=True, epochs=epochs,
+            validation_data=(valX, valY),
             callbacks=[gen_one_cap_callback])
 
         self.model.save_weights('my_model.h5')
         return
+
 
     def cap_gen_iter(self, beam_size, index_0):
         """Return a generator that iteratively generates caption, one at a time, and repeats on exhaust."""
@@ -162,6 +187,7 @@ class BuildModel():
 
 
     def cap_gen(self, beam_size, index):
+        """Predicting process. Generate captions for each image using beam-search."""
         self.model.load_weights('my_model.h5')
         img_all = self.img_extract('test_set')
         cap_pred = []
@@ -180,7 +206,9 @@ class BuildModel():
         f.close()
         return
 
+
     def beamsearch(self, img, beam_size, dct):
+        """Using beam-search to generate a best caption."""
         cap_beam = [[[dct['#']], 0.0] for _ in range(beam_size)]  # list of [caption, log prob]
         end = False
         count = 0
@@ -205,7 +233,9 @@ class BuildModel():
             count += 1
         return cap_beam
 
+
     def nextWordAppend(self, cap, next_word, prob, beam_size):
+        """In beam-search process, expanding one possible word."""
         out = []
         for i in range(beam_size):
             tmp = deepcopy(cap)
@@ -214,13 +244,17 @@ class BuildModel():
             out.append(tmp)
         return out
 
+
     def ifend(self, cap_beam, beam_size, dct):
+        """Determine whether beam-search should end or not."""
         flag = True
         for i in range(beam_size):
             flag &= (cap_beam[i][0][-1] == dct['$'])
         return flag
 
+
     def ind2word(self, cap, map, index):
+        """Decode the caption."""
         s = []
         for n in cap[1:-1]:
             s.append(map[n])
@@ -228,9 +262,10 @@ class BuildModel():
         index += 1
         return out, index
 
+
     def map2word(self, dct):
+        """Generate a caption-decoding map."""
         out = [''] * len(dct)
         for k in dct:
             out[dct[k]] = k
         return out
-
