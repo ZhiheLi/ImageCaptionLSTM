@@ -86,16 +86,13 @@ class BuildModel():
 
     def data_gen(self, key):
         """Generate data for the input of the neural network."""
-        img_all_ori = self.img_extract(key+'_set')
-        cap_all_ori = self.cap_extract(key)
+        img_all = self.img_extract(key+'_set')
+        cap_all = self.cap_extract(key)
 
         img = []
         next_word = []
         mask = []
         word_seq = []
-        rand_index = random.sample(range(len(cap_all_ori)), len(cap_all_ori))
-        img_all = img_all_ori[rand_index]
-        cap_all = np.array(cap_all_ori)[rand_index]
 
         for i, lst in enumerate(cap_all):
             for s in lst:
