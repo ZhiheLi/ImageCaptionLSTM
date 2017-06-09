@@ -4,7 +4,7 @@ from keras.models import Sequential, load_model
 from keras.layers import LSTM, Embedding, Dense, Merge, Layer, Reshape, Lambda, TimeDistributed, Activation
 from keras.preprocessing.sequence import pad_sequences
 from keras import metrics, optimizers
-from keras.callbacks import EarlyStopping
+from keras.callbacks import EarlyStopping, LambdaCallback, LearningRateScheduler, ModelCheckpoint
 from keras import backend
 from keras.utils import plot_model
 from keras import regularizers
@@ -16,6 +16,7 @@ import h5py
 import random
 import os
 import time
+import itertools
 
 from copy import deepcopy
 
@@ -119,7 +120,8 @@ class BuildModel():
         self.model.add(Lambda(slice))
         self.model.add(TimeDistributed(Dense(self.chrNum, activation='softmax')))
 
-        sgd = optimizers.SGD(lr = lr)
+        sgd = optimizers.SGD(lr=lr)
+        rmsprop = optimizers.RMSprop(lr=lr)
         self.model.compile(loss=_loss, optimizer=sgd,
                            metrics=[metrics.sparse_categorical_accuracy])
 
@@ -127,14 +129,37 @@ class BuildModel():
         return
 
     def model_fit(self, batch_size, epochs):
-                
         (trainX, trainY) = self.data_gen('train') 
         (valX, valY) = self.data_gen('validation')
-        self.model.load_weights('my_model.h5')
-        self.model.fit(trainX, trainY, batch_size=batch_size, shuffle=True, epochs=epochs, validation_data=(valX, valY))
+        # Uncomment the following line to finetune training:
+        # self.model.load_weights('my_model.h5')
+        # callbacks
+        cap_iter = self.cap_gen_iter(2, 9000)
+        gen_one_cap_callback = LambdaCallback(on_epoch_end=lambda epoch, logs: next(cap_iter))
+        lr_callback = LearningRateScheduler(lambda epoch: 0.01 * 0.1**(epoch//1000))
+        checkpoint_callback = ModelCheckpoint(
+            'checkpoints/weights_ep{epoch:04d}_loss{loss:.3f}_valloss{val_loss:.3f}.hdf5',
+            save_weights_only=True, period=200)
+        self.model.fit(trainX, trainY, batch_size=batch_size, shuffle=True, epochs=epochs, validation_data=(valX, valY),
+            callbacks=[gen_one_cap_callback])
 
         self.model.save_weights('my_model.h5')
         return
+
+    def cap_gen_iter(self, beam_size, index_0):
+        """Return a generator that iteratively generates caption, one at a time, and repeats on exhaust."""
+        img_all = self.img_extract('test_set')
+        dct = pkl.load(open('dictionary.pkl', 'rb'))
+        decode_dct = self.map2word(dct)
+        for img_idx, img in itertools.cycle(enumerate(img_all)):
+            cap_beam = self.beamsearch(img, beam_size, dct)
+            capstr = ''
+            for i in range(-min(len(cap_beam), 5), -1):
+                capstr, _ = self.ind2word(cap_beam[i][0], decode_dct, index_0 + img_idx)
+                print('\n' + capstr)
+            yield capstr
+            capstr = ''
+
 
     def cap_gen(self, beam_size, index):
         self.model.load_weights('my_model.h5')
