@@ -19,7 +19,7 @@ def main(dataset, prev_index):
 if __name__ == '__main__':
     # Usage: argv[0] [test/validation]
     dataset = 'test'
-    prev_index = 9001
+    prev_index = 9000
     if len(argv) >= 2:
         dataset = argv[1]
         prev_index = 8001
